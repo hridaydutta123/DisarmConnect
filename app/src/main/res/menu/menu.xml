@@ -1,0 +1,17 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:context="com.connect.disarm.disarmconnect.WiFiDirectActivity">
+    <item
+        android:id="@+id/action_settings"
+        android:orderInCategory="100"
+        android:title="@string/action_settings"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_favorite"
+        android:icon="@drawable/ic_setting_white_24dp"
+        android:title="@string/change_setting"
+        app:showAsAction="ifRoom"/>
+
+</menu>
