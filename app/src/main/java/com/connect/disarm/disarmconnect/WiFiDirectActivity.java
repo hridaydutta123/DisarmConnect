@@ -11,11 +11,10 @@ import android.net.wifi.SupplicantState;
 import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
-import android.net.wifi.p2p.WifiP2pManager;
 import android.os.Bundle;
+import android.os.Vibrator;
 import android.provider.Settings;
 import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
@@ -30,6 +29,8 @@ import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.connect.disarm.disarmconnect.Shaker.Callback;
+
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
@@ -39,7 +40,7 @@ import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 
-public class WiFiDirectActivity extends AppCompatActivity {
+public class WiFiDirectActivity extends AppCompatActivity implements Callback {
 
     ListView lv;
     TextView wifitext, hotspottext, wifiname, hotspotname;
@@ -47,7 +48,7 @@ public class WiFiDirectActivity extends AppCompatActivity {
     Drawable myDrawable, myDrawable1,scanwifi,hpoff,hpon;
     WifiManager wifi;
     String wifis[]={"None"}, checkWifiState="0x";
-    String ssid;
+    String ssid,ssid1;
     WifiScanReceiver wifiReciever;
     boolean b,c,wifiState;
     Timer myTimer,wifiTimer,hotspotDisplayTimer;
@@ -60,7 +61,12 @@ public class WiFiDirectActivity extends AppCompatActivity {
     BufferedReader br = null;
     FileReader fr = null;
     ArrayAdapter<String> arrayAdapter;
-    int startWifiFirst = 1;
+    int count=0,startwififirst = 1;
+    private Shaker shaker=null;
+    Vibrator v;
+
+
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -68,6 +74,7 @@ public class WiFiDirectActivity extends AppCompatActivity {
         setContentView(R.layout.main);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
+        Logger.addRecordToLog("Activity Started");
 
         lv = (ListView) findViewById(R.id.listview);
         wifitext = (TextView) findViewById(R.id.WiFitextView);
@@ -81,6 +88,13 @@ public class WiFiDirectActivity extends AppCompatActivity {
         scanwifi = getResources().getDrawable(R.drawable.ic_perm_scan_wifi_black_48dp);
         hpoff = getResources().getDrawable(R.drawable.ic_portable_wifi_off_black_48dp);
         hpon = getResources().getDrawable(R.drawable.ic_wifi_tethering_black_48dp);
+
+        //passing Shaking Arguments
+        shaker=new Shaker(this, 3.0d, 750, this);
+
+
+
+
 
         wifi =(WifiManager)getSystemService(Context.WIFI_SERVICE);
         wifiReciever = new WifiScanReceiver();
@@ -96,21 +110,19 @@ public class WiFiDirectActivity extends AppCompatActivity {
         fab.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-                Snackbar.make(view, "Replace with your own action", Snackbar.LENGTH_LONG)
-                        .setAction("Action", null).show();
-                Intent i = new Intent(WiFiDirectActivity.this, log.class);
+                Intent i = new Intent(WiFiDirectActivity.this,log.class);
                 startActivity(i);
             }
         });
 
-        myTimer = new Timer();
+      myTimer = new Timer();
         myTimer.schedule(new TimerTask() {
-        @Override
-        public void run() {
-            TimerMethod();
-        }
+            @Override
+            public void run() {
+                TimerMethod();
+            }
 
-    }, 0, 60 * 1000);
+        }, 0, 60 * 1000);
         wifiTimer = new Timer();
         wifiTimer.schedule(new TimerTask() {
             @Override
@@ -119,6 +131,8 @@ public class WiFiDirectActivity extends AppCompatActivity {
             }
 
         }, 0, 10*1000);
+
+
 
         hotspotDisplayTimer = new Timer();
         hotspotDisplayTimer.schedule(new TimerTask() {
@@ -131,18 +145,29 @@ public class WiFiDirectActivity extends AppCompatActivity {
 
 
     }
+
+
+
     protected void onPause() {
         unregisterReceiver(wifiReciever);
+        unregisterReceiver(WifiStateChangedReceiver);
+        Logger.addRecordToLog("Activity onPause called");
+
         super.onPause();
     }
 
     protected void onResume() {
         registerReceiver(wifiReciever, new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION));
+        registerReceiver(WifiStateChangedReceiver, new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION));
+        Logger.addRecordToLog("Activity onResume called");
+
         super.onResume();
     }
     public void onDestroy() {
+        Logger.addRecordToLog("Activity onDestroyed called ");
 
         super.onDestroy();
+        android.os.Process.killProcess(android.os.Process.myPid());
 
         finish();
     }
@@ -216,10 +241,16 @@ public class WiFiDirectActivity extends AppCompatActivity {
             checkWifiState =  wifiInfo.getSSID();
             Toast.makeText(WiFiDirectActivity.this, "Ticking", Toast.LENGTH_SHORT).show();
             Toast.makeText(WiFiDirectActivity.this, checkWifiState, Toast.LENGTH_SHORT).show();
+            count++;
+            Logger.addRecordToLog("Ticking"+count);
+            Logger.addRecordToLog(checkWifiState+"found"+count);
+
+
 
 
             if (checkWifiState.equals("<unknown ssid>")) {
                 Toast.makeText(WiFiDirectActivity.this, "Hotspot Mode Detected", Toast.LENGTH_SHORT).show();
+                Logger.addRecordToLog("Hotspot mode detected");
 
                 boolean isReachable = false;
                 try {
@@ -247,23 +278,30 @@ public class WiFiDirectActivity extends AppCompatActivity {
                                 Toast.makeText(
                                         getApplicationContext(),
                                         "C IS TRUE !!! ", Toast.LENGTH_SHORT).show();
+                                Logger.addRecordToLog("c is true");
                             }
 
                             // Basic sanity check
                             String mac = splitted[3];
                             System.out.println("Mac : Outside If " + mac);
+                            Logger.addRecordToLog("Mac : Outside If " + mac);
                             if (mac.matches("..:..:..:..:..:.."))
                             {
                                 macCount++;
 
                                 IpAddr.add(splitted[0]);
 
-                                System.out.println("Mac : "+ mac + " IP Address : "+splitted[0] );
+                                System.out.println("Mac : " + mac + " IP Address : " + splitted[0]);
                                 System.out.println("Mac_Count  " + macCount + " MAC_ADDRESS  "+ mac);
+
+                                Logger.addRecordToLog("Mac : " + mac + " IP Address : " + splitted[0]);
+                                Logger.addRecordToLog("Mac_Count  " + macCount + " MAC_ADDRESS  "+ mac);
                                 Toast.makeText(
                                         getApplicationContext(),
                                         "IP Address  " + splitted[0] + "   MAC_ADDRESS  "
                                                 + mac, Toast.LENGTH_SHORT).show();
+                                Logger.addRecordToLog("IP Address  " + splitted[0] + "   MAC_ADDRESS  "
+                                        + mac);
 
                             }
                         }
@@ -272,12 +310,15 @@ public class WiFiDirectActivity extends AppCompatActivity {
                         Toast.makeText(
                                 getApplicationContext(),
                                 "Connected!!! ", Toast.LENGTH_SHORT).show();
+
+                        Logger.addRecordToLog("conneted !!");
                     }
                     else
                     {
                         Toast.makeText(
                                 getApplicationContext(),
                                 "Not Connected!!! ", Toast.LENGTH_SHORT).show();
+                        Logger.addRecordToLog("Not Connected !!");
                     }
                 } catch(Exception e){
                     Log.e("MYAPP", "exception", e);
@@ -308,6 +349,7 @@ public class WiFiDirectActivity extends AppCompatActivity {
 
             else if (checkWifiState.contains("DisarmHotspot")) {
                 Toast.makeText(WiFiDirectActivity.this, "DisarmConnected Not Toggling", Toast.LENGTH_SHORT).show();
+                Logger.addRecordToLog("Disarm Connected Not Toggling");
             }
             else{
                 toggle();
@@ -350,20 +392,24 @@ public class WiFiDirectActivity extends AppCompatActivity {
 
         public void run() {
             Toast.makeText(getApplicationContext(), "Running Autoconnector", Toast.LENGTH_SHORT).show();
+            Logger.addRecordToLog("Running Auto connector");
             wifiInfo = wifi.getConnectionInfo();
             String ssidName = wifiInfo.getSSID();
             Toast.makeText(getApplicationContext(), ssidName, Toast.LENGTH_SHORT).show();
             if(ssidName.contains("DisarmHotspot")) {
                 Toast.makeText(getApplicationContext(), "Already Connected", Toast.LENGTH_SHORT).show();
+                Logger.addRecordToLog("Already Connected");
             }
             else if(!ssidName.equals("<unknown ssid>")){
                 Toast.makeText(getApplicationContext(), "Checking For Disarm Hotspot", Toast.LENGTH_SHORT).show();
+                Logger.addRecordToLog("Checking For Disarm Hotspot");
                 // Connecting to DisarmHotspot WIfi on Button Click
 
                 List allScanResults = wifi.getScanResults();
                 //Toast.makeText(getApplicationContext(), allScanResults.toString(), Toast.LENGTH_SHORT).show();
                 if (allScanResults.toString().contains("DisarmHotspot")) {
                     Toast.makeText(getApplicationContext(), "Connecting Disarm", Toast.LENGTH_SHORT).show();
+                    Logger.addRecordToLog("Connecting Disarm");
                     String ssid = "DisarmHotspot";
                     WifiConfiguration wc = new WifiConfiguration();
                     wc.SSID = "\"" + ssid + "\""; //IMPORTANT! This should be in Quotes!!
@@ -371,9 +417,11 @@ public class WiFiDirectActivity extends AppCompatActivity {
                     int res = wifi.addNetwork(wc);
                     boolean b = wifi.enableNetwork(res, true);
                     Toast.makeText(getApplicationContext(), "Connected", Toast.LENGTH_SHORT).show();
+                    Logger.addRecordToLog("Connected");
                 }
                 else{
                     Toast.makeText(getApplicationContext(), "Disarm Not Available", Toast.LENGTH_SHORT).show();
+                    Logger.addRecordToLog("Disarm Not Available");
                 }
 
             }
@@ -382,16 +430,17 @@ public class WiFiDirectActivity extends AppCompatActivity {
 
     public void toggle(){
         Toast.makeText(WiFiDirectActivity.this, "Toggling randomly!!!", Toast.LENGTH_LONG).show();
+        Logger.addRecordToLog("Toggling Randomly !!");
         //This method runs in the same thread as the UI.
         //Do something to the UI thread here
-        if(startWifiFirst == 1) {
-            wifiState = false;
-            startWifiFirst = 0;
-        }
-        else
-        {
+        if (startwififirst == 1){
+            wifiState= false;
+            startwififirst = 0;
+        }else{
             wifiState = (Math.random() < 0.5);
         }
+
+
         //wifiState = false;
         // WifiState - 1 (Is Hotspot) || 0 - (CheckHotspot)
         if(wifiState) {
@@ -402,15 +451,19 @@ public class WiFiDirectActivity extends AppCompatActivity {
                 ApManager.configApState(WiFiDirectActivity.this);
             }
             Toast.makeText(WiFiDirectActivity.this, "Hotspot Active", Toast.LENGTH_SHORT).show();
+            Logger.addRecordToLog("Hotspot Active");
         }
         else {
             b = ApManager.isApOn(WiFiDirectActivity.this);
-
-            if (b) {
+            if(b)
+            {
                 ApManager.configApState(WiFiDirectActivity.this);
+
             }
+
             wifi.setWifiEnabled(true);
             Toast.makeText(WiFiDirectActivity.this, "Wifi Active", Toast.LENGTH_SHORT).show();
+            Logger.addRecordToLog("wifi Active");
             wifi.startScan();
 
 
@@ -455,24 +508,30 @@ public class WiFiDirectActivity extends AppCompatActivity {
                 case WifiManager.WIFI_STATE_DISABLED:
                     wifiname.setText("WIFI  DISABLED");
                     imgwifi.setImageDrawable(myDrawable1);
+                    Logger.addRecordToLog("wifi_state_disabled");
                     break;
                 case WifiManager.WIFI_STATE_DISABLING:
                     wifiname.setText("WIFI STATE DISABLING");
                     imgwifi.setImageDrawable(myDrawable1);
+                    Logger.addRecordToLog("wifi_state_disabling");
                     break;
                 case WifiManager.WIFI_STATE_ENABLED:
-                    ssid = wifi.getConnectionInfo().getSSID().toString();
-                    wifiname.setText(ssid);
+                    ssid1 = wifi.getConnectionInfo().getSSID().toString();
+                    wifiname.setText(ssid1);
                     imgwifi.setImageDrawable(myDrawable);
+                    Logger.addRecordToLog("Connected to : "+ssid1);
                     break;
                 case WifiManager.WIFI_STATE_ENABLING:
-                    ssid = wifi.getConnectionInfo().getSSID().toString();
-                    wifiname.setText(ssid);
+                    ssid1 = wifi.getConnectionInfo().getSSID().toString();
+                    wifiname.setText(ssid1);
                     imgwifi.setImageDrawable(scanwifi);
+                    Logger.addRecordToLog("wifi_state_enabling to : "+ssid1);
                     break;
                 case WifiManager.WIFI_STATE_UNKNOWN:
-                    wifiname.setText("WIFI STATE UNKNOWN");
+                    ssid1 = wifi.getConnectionInfo().getSSID().toString();
+                    wifiname.setText(ssid1);
                     imgwifi.setImageDrawable(scanwifi);
+                    Logger.addRecordToLog("wifi_state_unknown");
                     break;
 
             }
@@ -530,16 +589,53 @@ public class WiFiDirectActivity extends AppCompatActivity {
                     imghotspot.setImageDrawable(hpoff);
                     hotspotname.setText("Hotspot is OFF");
 
+
                 } else   {
                     imghotspot.setImageDrawable(hpon);
                     hotspotname.setText("Hotspot is ON");
+
                 }
 
 
         }
     };
 
-    public void testAp (MenuItem item) {
+    @Override
+    public void shakingStarted() {
+        Log.d("Shake", "Shaking started!");
+         v = (Vibrator) this.getSystemService(Context.VIBRATOR_SERVICE);
+        // Vibrate for 500 milliseconds
+        v.vibrate(250);
+
+        b = ApManager.isApOn(WiFiDirectActivity.this);
+        if (b) {
+            ApManager.configApState(WiFiDirectActivity.this);
+            wifi.setWifiEnabled(true);
+            Log.d("OnShake", "Changing WiFi ON");
+
+
+        }
+        else if(!b)  {
+            v = (Vibrator) this.getSystemService(Context.VIBRATOR_SERVICE);
+            // Vibrate for 500 milliseconds
+            v.vibrate(250);
+            wifi.setWifiEnabled(false);
+            ApManager.configApState(WiFiDirectActivity.this);
+            Log.d("OnShake", "Changing Hotspot ON");
+        }
+
+
+
+
+    }
+
+    @Override
+    public boolean shakingStopped() {
+        Log.d("Shake", "Shaking stopped!");
+        return false;
+    }
+
+    /*public void testAp (MenuItem item) {
 
         b = ApManager.isApOn(WiFiDirectActivity.this); // check Ap state :boolean
         c = ApManager.configApState(WiFiDirectActivity.this); // change Ap state :boolean
@@ -558,7 +654,7 @@ public class WiFiDirectActivity extends AppCompatActivity {
             Toast.makeText(this, "Disabling Wifi. Press Hotspot Button again !!", Toast.LENGTH_LONG).show();
             wifi.setWifiEnabled(false);
         }
-    }
+    }*/
 
 
         public class WifiScanReceiver extends BroadcastReceiver {
@@ -569,13 +665,11 @@ public class WiFiDirectActivity extends AppCompatActivity {
 
                 for (int i = 0; i < wifiScanList.size(); i++) {
                     wifis[i] = ((wifiScanList.get(i)).SSID);
+                    Logger.addRecordToLog(wifis.toString());
 
                 }
 
-                 //arrayAdapter = new ArrayAdapter<String>(getApplicationContext(), R.layout.view_row, R.id.header_text, wifis);
-                //final ExpandableLayoutListView expandableLayoutListView = (ExpandableLayoutListView) findViewById(R.id.listview);
 
-               // expandableLayoutListView.setAdapter(arrayAdapter);
                 lv.setAdapter(new ArrayAdapter<String>(getApplicationContext(), R.layout.view_header, R.id.header_text, wifis));
 
                 lv.setOnItemClickListener(new AdapterView.OnItemClickListener() {
@@ -598,6 +692,7 @@ public class WiFiDirectActivity extends AppCompatActivity {
 
                                 // Write your code here to invoke YES event
                                 Toast.makeText(getApplicationContext(), "Connecting", Toast.LENGTH_SHORT).show();
+                                Logger.addRecordToLog("AlertDialog setpositive connecting");
 
                                 //Connecting to specific network
                                 WifiConfiguration conf = new WifiConfiguration();
@@ -616,6 +711,7 @@ public class WiFiDirectActivity extends AppCompatActivity {
                                         wifi.enableNetwork(i.networkId, true);
                                         wifi.reconnect();
                                         Toast.makeText(getApplicationContext(), "Connected", Toast.LENGTH_SHORT).show();
+                                        Logger.addRecordToLog("AlertDialod Connecting");
 
                                         break;
                                     }
@@ -630,6 +726,7 @@ public class WiFiDirectActivity extends AppCompatActivity {
                                 // Write your code here to invoke NO event
                                 wifi.disconnect();
                                 Toast.makeText(getApplicationContext(), "Disconnect", Toast.LENGTH_SHORT).show();
+                                Logger.addRecordToLog("AlertDialog Disconnect");
                                 dialog.cancel();
                             }
 
